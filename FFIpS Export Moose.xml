@@ -1,0 +1,495 @@
+<?xml version="1.0" ?>
+<CustomReport title="FFIpS Export Moose" menupath="Exporte nach FFIpS" 
+description="Exportiert Moose eines Projektes oder eines Begangs in eine Struktur, die In FFIpS importiert werden kann.
+v01.0 vom 01.11.2018 TS
+v02.0 vom 21.07.2019, ergänzt um Ausgabe über ein ganzes Projekt
+v03.0 vom 11.05.2020, Anpassung an FFIpS: es wird jetzt der Taxon_Version_Key als externer SChlüssel ausgegeben"
+>
+
+<SQL>
+
+    declare @indicia_user_name varchar(50)
+    set @indicia_user_name = 'Tim Tester'
+
+    
+    --Zur Sicherheit
+    IF OBJECT_ID('tempdb..#aufnahmemethode_moose') IS NOT NULL
+        DROP TABLE #aufnahmemethode_moose
+    IF OBJECT_ID('tempdb..#nachweismethode_moose') IS NOT NULL
+        DROP TABLE #nachweismethode_moose
+    IF OBJECT_ID('tempdb..#substrattyp_moose') IS NOT NULL
+        DROP TABLE #substrattyp_moose
+    IF OBJECT_ID('tempdb..#trägergehölz_moose') IS NOT NULL
+        DROP TABLE #trägergehölz_moose
+    IF OBJECT_ID('tempdb..#fertilität_moose') IS NOT NULL
+        DROP TABLE #fertilität_moose
+    IF OBJECT_ID('tempdb..#TMP_RESULTS') IS NOT NULL
+        DROP TABLE #TMP_RESULTS
+
+    -- Referenztabellen anlegen
+    
+    CREATE TABLE #aufnahmemethode_moose  
+       (name varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+    INSERT INTO #aufnahmemethode_moose VALUES ('Bryolog. Kartierung')
+    INSERT INTO #aufnahmemethode_moose VALUES ('BryoKart Kurznotiz')
+    INSERT INTO #aufnahmemethode_moose VALUES ('BryoKart Einzelmeldung')
+    INSERT INTO #aufnahmemethode_moose VALUES ('BryoKart Punktdaten')
+    INSERT INTO #aufnahmemethode_moose VALUES ('Feldbeobachtung')
+    
+    CREATE TABLE #nachweismethode_moose  
+       (kurzname varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        langname varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+    INSERT INTO #nachweismethode_moose VALUES ('G', 'Geländebeobachtung')
+    INSERT INTO #nachweismethode_moose VALUES ('!', 'Mikroskopiert')
+    INSERT INTO #nachweismethode_moose VALUES ('H', 'Herbarbeleg')
+    
+    CREATE TABLE #substrattyp_moose  
+       (kurzname varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        langname varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+    
+    INSERT INTO #substrattyp_moose VALUES ('W', 'Wasser')
+    INSERT INTO #substrattyp_moose VALUES ('Bsc', 'Schlamm')
+    INSERT INTO #substrattyp_moose VALUES ('Be', 'Erde')
+    INSERT INTO #substrattyp_moose VALUES ('Ben', 'Erde, nass')
+    INSERT INTO #substrattyp_moose VALUES ('Bef', 'Erde, feucht')
+    INSERT INTO #substrattyp_moose VALUES ('Bet', 'Erde, frisch - trocken')
+    INSERT INTO #substrattyp_moose VALUES ('BeW', 'Wurzelteller')
+    INSERT INTO #substrattyp_moose VALUES ('Bed', 'Rohhumus, Torf, Detritus')
+    INSERT INTO #substrattyp_moose VALUES ('BedN', 'Nadelstreu')
+    INSERT INTO #substrattyp_moose VALUES ('BedL', 'Laubstreu/Moder')
+    INSERT INTO #substrattyp_moose VALUES ('Oth', 'Totes Holz')
+    INSERT INTO #substrattyp_moose VALUES ('Olh', 'Lebende Bäume, Sträucher')
+    INSERT INTO #substrattyp_moose VALUES ('OlhSt', 'Lebende Bäume, Stamm')
+    INSERT INTO #substrattyp_moose VALUES ('OlhK', 'Lebende Bäume, Kronenbereich')
+    INSERT INTO #substrattyp_moose VALUES ('OlhS', 'Stammablaufschürze')
+    INSERT INTO #substrattyp_moose VALUES ('OlhB', 'Stammbasis')
+    INSERT INTO #substrattyp_moose VALUES ('Ofm', 'Flechten, Moose')
+    INSERT INTO #substrattyp_moose VALUES ('Off', 'Farnstöcke')
+    INSERT INTO #substrattyp_moose VALUES ('Ogl', 'Kot, Gewölle, Tierleichen')
+    INSERT INTO #substrattyp_moose VALUES ('Mtk', 'Kalktuff, aktiv')
+    INSERT INTO #substrattyp_moose VALUES ('Mrk', 'Gesteinsrohboden, kalkreich')
+    INSERT INTO #substrattyp_moose VALUES ('Mra', 'Gesteinsrohboden, kalkarm')
+    INSERT INTO #substrattyp_moose VALUES ('Mkn', 'Kalkr.Gestein, nass')
+    INSERT INTO #substrattyp_moose VALUES ('Mkf', 'Kalkr.Gestein , feucht')
+    INSERT INTO #substrattyp_moose VALUES ('Mkt', 'Kalkr. Gestein, frisch-trocken')
+    INSERT INTO #substrattyp_moose VALUES ('Msn', 'Kalkarmes Gestein, nass')
+    INSERT INTO #substrattyp_moose VALUES ('Msf', 'Kalkarmes Gestein, feucht')
+    INSERT INTO #substrattyp_moose VALUES ('Mst', 'Kalkarmes Gestein, frisch - trocken')
+    INSERT INTO #substrattyp_moose VALUES ('So', 'Sonstiges Substrat')
+    
+    CREATE TABLE #trägergehölz_moose  
+       (name varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+    
+    INSERT INTO #trägergehölz_moose VALUES ('Abies alba')
+    INSERT INTO #trägergehölz_moose VALUES ('Acer campestre')
+    INSERT INTO #trägergehölz_moose VALUES ('Acer platanoides')
+    INSERT INTO #trägergehölz_moose VALUES ('Acer pseudoplatanus')
+    INSERT INTO #trägergehölz_moose VALUES ('Aesculus hippoc.')
+    INSERT INTO #trägergehölz_moose VALUES ('Alnus glutinosa')
+    INSERT INTO #trägergehölz_moose VALUES ('Betula pendula')
+    INSERT INTO #trägergehölz_moose VALUES ('Betula pubescens')
+    INSERT INTO #trägergehölz_moose VALUES ('Betula spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Carpinus betulus')
+    INSERT INTO #trägergehölz_moose VALUES ('Castanea sativa')
+    INSERT INTO #trägergehölz_moose VALUES ('Cornus sanguinea')
+    INSERT INTO #trägergehölz_moose VALUES ('Corylus avellana')
+    INSERT INTO #trägergehölz_moose VALUES ('Cotoneaster spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Crataegus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Cydonia oblonga')
+    INSERT INTO #trägergehölz_moose VALUES ('Cytisus scoparius')
+    INSERT INTO #trägergehölz_moose VALUES ('Fagus sylvatica')
+    INSERT INTO #trägergehölz_moose VALUES ('Fraxinus excelsior')
+    INSERT INTO #trägergehölz_moose VALUES ('Hedera helix')
+    INSERT INTO #trägergehölz_moose VALUES ('Ilex aquifolia')
+    INSERT INTO #trägergehölz_moose VALUES ('Juglans nigra')
+    INSERT INTO #trägergehölz_moose VALUES ('Juglans regia')
+    INSERT INTO #trägergehölz_moose VALUES ('Larix spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Malus domestica')
+    INSERT INTO #trägergehölz_moose VALUES ('Malus sylvestris')
+    INSERT INTO #trägergehölz_moose VALUES ('Picea abies')
+    INSERT INTO #trägergehölz_moose VALUES ('Picea sitchensis')
+    INSERT INTO #trägergehölz_moose VALUES ('Pinus nigra')
+    INSERT INTO #trägergehölz_moose VALUES ('Pinus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Pinus sylvestris')
+    INSERT INTO #trägergehölz_moose VALUES ('Populus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Populus tremula')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus avium')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus padus')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus serotina')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus cerasifera')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus domestica')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Prunus spinosa')
+    INSERT INTO #trägergehölz_moose VALUES ('Pseudotsuga menz.')
+    INSERT INTO #trägergehölz_moose VALUES ('Pyrus communis')
+    INSERT INTO #trägergehölz_moose VALUES ('Pyrus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Quercus petraea')
+    INSERT INTO #trägergehölz_moose VALUES ('Quercus robur')
+    INSERT INTO #trägergehölz_moose VALUES ('Quercus rubra')
+    INSERT INTO #trägergehölz_moose VALUES ('Quercus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Robinia pseudacacia')
+    INSERT INTO #trägergehölz_moose VALUES ('Salix spec. B')
+    INSERT INTO #trägergehölz_moose VALUES ('Salix spec. S')
+    INSERT INTO #trägergehölz_moose VALUES ('Salix caprea')
+    INSERT INTO #trägergehölz_moose VALUES ('Sambucus nigra')
+    INSERT INTO #trägergehölz_moose VALUES ('Sambucus racemosus')
+    INSERT INTO #trägergehölz_moose VALUES ('Sonstiges Laubgh.')
+    INSERT INTO #trägergehölz_moose VALUES ('Sonstiges Nadelgh.')
+    INSERT INTO #trägergehölz_moose VALUES ('Sorbus aria agg.')
+    INSERT INTO #trägergehölz_moose VALUES ('Sorbus aucuparia')
+    INSERT INTO #trägergehölz_moose VALUES ('Sorbus torminalis')
+    INSERT INTO #trägergehölz_moose VALUES ('Sorbus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Tilia spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Ulmus glabra')
+    INSERT INTO #trägergehölz_moose VALUES ('Ulmus laevis')
+    INSERT INTO #trägergehölz_moose VALUES ('Ulmus minor')
+    INSERT INTO #trägergehölz_moose VALUES ('Ulmus spec.')
+    INSERT INTO #trägergehölz_moose VALUES ('Viburnum lantana')
+    INSERT INTO #trägergehölz_moose VALUES ('Vitis vinifera')
+    
+    CREATE TABLE #fertilität_moose  
+       (kurzname varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        langname varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+    
+    INSERT INTO #fertilität_moose VALUES ('cs', 'mit Sporopyhten')
+    INSERT INTO #fertilität_moose VALUES ('cp', 'mit Perichätium')
+    INSERT INTO #fertilität_moose VALUES ('cg', 'mit Gemmen')
+    INSERT INTO #fertilität_moose VALUES ('ss', 'ohne Sporopyhten')
+    INSERT INTO #fertilität_moose VALUES ('sp', 'ohne Perichätium')
+    INSERT INTO #fertilität_moose VALUES ('sg', 'ohne Gemmen')
+    
+    
+    
+    --Ausgabedatei erstellen
+    
+    CREATE TABLE #TMP_RESULTS  
+       ([Sippenname] varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Taxnummer (BfN-Referenz)] char(16) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Nachweismethode Moose (Existierende Werte)] varchar(60) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Fertilität (Existierende Werte)] varchar(60) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Trägergehölz Moose (Existierende Werte)] varchar(60) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Substrattyp Moose (Existierende Werte)] varchar(60) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Kommentar zur Artbeobachtung] varchar(8000) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Aufnahmedatum] varchar(24) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Koordinaten] varchar(24) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Koordinatensystem (EPSG-Code)] varchar(4) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Unschärfe (m)] varchar(6) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Verantwortlicher Beobachter] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Beobachter] varchar(1000) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Fundortname] varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Kommentar zur Aufnahme] varchar(8000) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Aufnahmemethode] varchar(140) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Datenquelle] varchar(200) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Externe ID der Aufnahme] char(16) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Externe ID des Datensatzes] char(16) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Bestimmungssicherheit (sicher/unsicher)] varchar(8) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Eingabeform (nicht verwendet)]  varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS --,
+        --[Datensatz erstellt durch (Referenzierter Anwender)] varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        --[Datensatz aktualisiert durch] varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        --[Aufnahme erstellt durch] varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        --[Aufnahme aktualisiert durch] varchar(40) COLLATE SQL_Latin1_General_CP1_CI_AS
+       )
+
+
+    <Where keytype="survey">
+    
+    declare @survey_key char(16)
+    set @survey_key = '%s'
+    
+    DELETE FROM #tmp_results
+    
+    INSERT INTO #tmp_results
+    SELECT 
+    -- s.spatial_ref,
+    -- s.SAMPLE_REFERENCE,
+    dbo.ufn_BfNReturnFormattedSpeciesNameFlora(TLI.PREFERRED_NAME, 1) as taxon_name, --[Sippenname],
+    --tli.TAXON_VERSION_KEY AS taxnr, --[Taxnummer (BfN-Referenz)],
+    tli.PREFERRED_NAME AS taxnr, --[Taxnummer (BfN-Referenz)],
+    (select distinct LONG_NAME from record_type rt where rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
+    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
+    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
+    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
+    left(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
+    rtrim(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
+    cast(cast(s.lat as decimal(9,5)) as varchar(9))+'N '+cast(cast(s.long as decimal(9,5)) as varchar(9))+'E' AS coordinates, --Koordinaten,
+    '4326' AS crs, --[Koordinatensystem (EPSG-Code)],
+    isnull(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  as usr, --[Unschärfe (m)],
+    dbo.ufn_BfNGetResponsibleRecorder(s.sample_key) AS responsible_recorder, --[Verantwortlicher Beobachter],
+    --left(dbo.ufn_BfNGetRecorders(s.sample_key, CHAR(13)),2000) AS recorders, --[Beobachter],
+    left(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
+    case when isnull(s.location_name, '') = '' then LN.ITEM_NAME 
+         when LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
+         when rtrim(LN.ITEM_NAME) = rtrim(S.LOCATION_NAME) THEN S.LOCATION_NAME
+         ELSE LN.ITEM_NAME + ' (' + S.LOCATION_NAME +')'
+    END AS location_name, --Fundortname,
+    ISNULL(dbo.ufn_RtfToPlaintext2(s.comment,1),'') AS sample_comment, --[Kommentar zur Aufnahme],
+    st.Short_name AS sample_type, --[Aufnahmemethode],
+    'ADBS' AS data_source, --Datenquelle,
+    s.sample_key as sample_id, --[Externe ID der Aufnahme],
+    toc.taxon_occurrence_key as occurrence_id, -- [Externe ID des Datensatzes],
+    'sicher' as p1, --[Bestimmungssicherheit (sicher/unsicher)],
+    'moose-kartierliste' as entry_form  --, --[Eingabeform]
+    --@indicia_user_name AS [Datensatz erstellt durch (Referenzierter Anwender)],
+    --@indicia_user_name  AS [Datensatz aktualisiert durch],
+    --@indicia_user_name  AS [Aufnahme erstellt durch],
+    --@indicia_user_name  AS [Aufnahme aktualisiert durch]
+    FROM  Survey SV
+    INNER JOIN Survey_Event SE ON SE.Survey_Key = SV.Survey_Key
+    INNER JOIN [Sample] S ON S.Survey_Event_Key =SE.Survey_Event_Key
+    INNER JOIN Sample_type ST ON S.Sample_Type_Key = ST.Sample_Type_Key
+    LEFT OUTER JOIN (select * from Location_name LN where preferred = 1) LN ON LN.LOCATION_KEY = S.LOCATION_KEY
+    INNER JOIN Taxon_Occurrence TOC ON TOC.Sample_key = S.Sample_Key
+    INNER JOIN Taxon_Determination TDET ON TDET.Taxon_Occurrence_Key = TOC.Taxon_Occurrence_Key
+    --INNER JOIN Index_Taxon_Name ITN ON ITN.Taxon_List_Item_Key =TDET.Taxon_List_Item_Key
+    INNER JOIN Taxon_List_Item TLI ON TLI.Taxon_List_Item_Key = TDET.Taxon_List_Item_Key
+    INNER JOIN Taxon_Version TV ON TV.Taxon_Version_Key = TLI.Taxon_Version_Key
+                    WHERE NOT toc.VERIFIED=1
+                          AND toc.CONFIDENTIAL=0
+                          AND toc.ZERO_ABUNDANCE=0 
+                          AND toc.CHECKED=1
+                          AND NOT s.SPATIAL_REF_SYSTEM in ('QQQ','QYX')
+                          AND tv.OUTPUT_GROUP_KEY IN ('NHMSYS0000080061','NHMSYS0000080083','NHMSYS0000080090')  --nur Moose!
+                          AND SE.SURVEY_KEY = @survey_key
+    
+    
+    -- *** Nachbearbeitung ***
+    
+    --TAXON_VERSION_KEY statt taxon_list_item_key 
+    UPDATE #tmp_results  
+        SET Sippenname = dbo.ufn_BfNReturnFormattedSpeciesNameFlora(tli2.TAXON_LIST_ITEM_KEY, 1),
+        [Taxnummer (BfN-Referenz)] = tli2.TAXON_VERSION_KEY
+    FROM #TMP_RESULTS tr
+    INNER JOIN TAXON_LIST_ITEM tli ON tli.TAXON_LIST_ITEM_KEY = tr.[Taxnummer (BfN-Referenz)]
+    INNER JOIN TAXON_LIST_ITEM tli2 ON tli2.TAXON_VERSION_KEY = tli.TAXON_VERSION_KEY
+    
+    -- Nachweismethode
+    update #tmp_results set [Nachweismethode Moose (Existierende Werte)] = '' where [Nachweismethode Moose (Existierende Werte)] = 'none'
+    UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = UPPER(LEFT([Nachweismethode Moose (Existierende Werte)],1))+LOWER(SUBSTRING([Nachweismethode Moose (Existierende Werte)],2,LEN([Nachweismethode Moose (Existierende Werte)])))
+    
+    
+    --Fertilität
+    UPDATE #tmp_results SET [Fertilität (Existierende Werte)] = '' WHERE [Fertilität (Existierende Werte)] NOT IN (SELECT kurzname FROM #fertilität_moose)
+    UPDATE #tmp_results SET [Fertilität (Existierende Werte)] = t2.langname FROM #tmp_results t1 
+           JOIN #fertilität_moose t2  ON t1.[Fertilität (Existierende Werte)] = t2.kurzname
+    
+    --Trägergehölz: unbekannte entfernen
+    UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] = '' WHERE [Trägergehölz Moose (Existierende Werte)] NOT IN (SELECT name FROM #trägergehölz_moose)
+    
+    --Substrattyp: Kürzel nicht geparst bei der Eingabe
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] = LEFT([Substrattyp Moose (Existierende Werte)],charindex('-',[Substrattyp Moose (Existierende Werte)])-1) WHERE charindex('-',[Substrattyp Moose (Existierende Werte)]) &gt; 0
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] = '' WHERE [Substrattyp Moose (Existierende Werte)] NOT IN (SELECT kurzname FROM #substrattyp_moose)
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] = t2.langname FROM #tmp_results t1 
+           JOIN #substrattyp_moose t2  ON t1.[Substrattyp Moose (Existierende Werte)] = t2.kurzname
+    
+    --NULL-Werte ersetzen
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] =  '' WHERE [Substrattyp Moose (Existierende Werte)] IS NULL
+    UPDATE #tmp_results SET [Fertilität (Existierende Werte)] =  '' WHERE [Fertilität (Existierende Werte)] IS NULL
+    UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] =  '' WHERE [Trägergehölz Moose (Existierende Werte)] IS NULL
+    
+    --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+           WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
+    
+    --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+           WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
+
+    --Zeilenumbrüchen in Zellen durch pipe ersetzen
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = left([Kommentar zur Artbeobachtung],len([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = REPLACE([Kommentar zur Aufnahme],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Aufnahme] != ''
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = REPLACE([Kommentar zur Artbeobachtung],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Artbeobachtung] != ''
+    
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  len([Kommentar zur Aufnahme]) AND len([Kommentar zur Aufnahme]) &gt; 0
+    
+    --Quelle hineinschreiben: Recorder Site-ID, Projekt, Projektleiter, SURVEY_EVENT_KEY
+    
+    UPDATE #tmp_results  SET Datenquelle = 
+    'Recorder SiteID ' + (SELECT TOP 1 DATA from SETTING where Name = 'SiteID') +' | '+ 'Projekt ' + item_name + ' (' +dbo.ufn_GetFormattedName(sv.run_by) +')' + ' | '+'Sample ID: '+[Externe ID der Aufnahme]
+    FROM #TMP_RESULTS tr
+    INNER JOIN SAMPLE s on s.SAMPLE_KEY = tr.[Externe ID der Aufnahme]
+    INNER JOIN SURVEY_EVENT se ON se.SURVEY_EVENT_KEY = s.SURVEY_EVENT_KEY
+    INNER JOIN SURVEY sv on sv.SURVEY_KEY = se.SURVEY_KEY
+    
+    --Indicia verwendet nicht den Unschärferadius sondern den Unschärfedurchmesser um einen Punkt deswegen:
+    UPDATE #tmp_results  SET [Unschärfe (m)] = 
+    cast((cast([Unschärfe (m)] as integer) * 2) as varchar(6))
+    WHERE [Unschärfe (m)] != ''
+    
+    -- Überprüfen, ob die Aufnahmemethod für Moose gültig ist. Ansonsten ersetzen durch "Feldbobachtung"
+    UPDATE #tmp_results  SET Aufnahmemethode = 'Feldbeobachtung'
+    WHERE Aufnahmemethode NOT IN (SELECT name FROM #aufnahmemethode_moose)
+    
+    
+    
+    SELECT * FROM #TMP_RESULTS ORDER BY [Externe ID der Aufnahme], [Externe ID des Datensatzes]
+    </Where>
+
+
+
+    <Where keytype="Event">
+    
+    declare @survey_event_key char(16)
+    set @survey_event_key = '%s'
+    
+    
+    
+    DELETE FROM #tmp_results
+    
+    INSERT INTO #tmp_results
+    SELECT 
+    -- s.spatial_ref,
+    -- s.SAMPLE_REFERENCE,
+    dbo.ufn_BfNReturnFormattedSpeciesNameFlora(TLI.PREFERRED_NAME, 1) as taxon_name, --[Sippenname],
+    --tli.TAXON_VERSION_KEY AS taxnr, --[Taxnummer (BfN-Referenz)],
+    tli.PREFERRED_NAME AS taxnr, --[Taxnummer (BfN-Referenz)],
+    (select distinct LONG_NAME from record_type rt where rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
+    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
+    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
+    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
+    left(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
+    rtrim(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
+    cast(cast(s.lat as decimal(9,5)) as varchar(9))+'N '+cast(cast(s.long as decimal(9,5)) as varchar(9))+'E' AS coordinates, --Koordinaten,
+    '4326' AS crs, --[Koordinatensystem (EPSG-Code)],
+    isnull(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  as usr, --[Unschärfe (m)],
+    dbo.ufn_BfNGetResponsibleRecorder(s.sample_key) AS responsible_recorder, --[Verantwortlicher Beobachter],
+    --left(dbo.ufn_BfNGetRecorders(s.sample_key, CHAR(13)),2000) AS recorders, --[Beobachter],
+    left(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
+    case when isnull(s.location_name, '') = '' then LN.ITEM_NAME 
+         when LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
+         when rtrim(LN.ITEM_NAME) = rtrim(S.LOCATION_NAME) THEN S.LOCATION_NAME
+         ELSE LN.ITEM_NAME + ' (' + S.LOCATION_NAME +')'
+    END AS location_name, --Fundortname,
+    ISNULL(dbo.ufn_RtfToPlaintext2(s.comment,1),'') AS sample_comment, --[Kommentar zur Aufnahme],
+    st.Short_name AS sample_type, --[Aufnahmemethode],
+    'ADBS' AS data_source, --Datenquelle,
+    s.sample_key as sample_id, --[Externe ID der Aufnahme],
+    toc.taxon_occurrence_key as occurrence_id, -- [Externe ID des Datensatzes],
+    'sicher' as p1, --[Bestimmungssicherheit (sicher/unsicher)],
+    'moose-kartierliste' as entry_form  --, --[Eingabeform]
+    --@indicia_user_name AS [Datensatz erstellt durch (Referenzierter Anwender)],
+    --@indicia_user_name  AS [Datensatz aktualisiert durch],
+    --@indicia_user_name  AS [Aufnahme erstellt durch],
+    --@indicia_user_name  AS [Aufnahme aktualisiert durch]
+    FROM  Survey SV
+    INNER JOIN Survey_Event SE ON SE.Survey_Key = SV.Survey_Key
+    INNER JOIN [Sample] S ON S.Survey_Event_Key =SE.Survey_Event_Key
+    INNER JOIN Sample_type ST ON S.Sample_Type_Key = ST.Sample_Type_Key
+    LEFT OUTER JOIN (select * from Location_name LN where preferred = 1) LN ON LN.LOCATION_KEY = S.LOCATION_KEY
+    INNER JOIN Taxon_Occurrence TOC ON TOC.Sample_key = S.Sample_Key
+    INNER JOIN Taxon_Determination TDET ON TDET.Taxon_Occurrence_Key = TOC.Taxon_Occurrence_Key
+    --INNER JOIN Index_Taxon_Name ITN ON ITN.Taxon_List_Item_Key =TDET.Taxon_List_Item_Key
+    INNER JOIN Taxon_List_Item TLI ON TLI.Taxon_List_Item_Key = TDET.Taxon_List_Item_Key
+    INNER JOIN Taxon_Version TV ON TV.Taxon_Version_Key = TLI.Taxon_Version_Key
+                    WHERE NOT toc.VERIFIED=1
+                          AND toc.CONFIDENTIAL=0
+                          AND toc.ZERO_ABUNDANCE=0 
+                          AND toc.CHECKED=1
+                          AND NOT s.SPATIAL_REF_SYSTEM in ('QQQ','QYX')
+                          AND tv.OUTPUT_GROUP_KEY IN ('NHMSYS0000080061','NHMSYS0000080083','NHMSYS0000080090')  --nur Moose!
+                          and SE.SURVEY_EVENT_KEY = @survey_event_key
+    
+    
+    -- *** Nachbearbeitung ***
+    
+    --TAXON_VERSION_KEY statt taxon_list_item_key 
+    UPDATE #tmp_results  
+        SET Sippenname = dbo.ufn_BfNReturnFormattedSpeciesNameFlora(tli2.TAXON_LIST_ITEM_KEY, 1),
+        [Taxnummer (BfN-Referenz)] = tli2.TAXON_VERSION_KEY
+    FROM #TMP_RESULTS tr
+    INNER JOIN TAXON_LIST_ITEM tli ON tli.TAXON_LIST_ITEM_KEY = tr.[Taxnummer (BfN-Referenz)]
+    INNER JOIN TAXON_LIST_ITEM tli2 ON tli2.TAXON_VERSION_KEY = tli.TAXON_VERSION_KEY
+    
+    
+    -- Nachweismethode
+    update #tmp_results set [Nachweismethode Moose (Existierende Werte)] = '' where [Nachweismethode Moose (Existierende Werte)] = 'none'
+    UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = UPPER(LEFT([Nachweismethode Moose (Existierende Werte)],1))+LOWER(SUBSTRING([Nachweismethode Moose (Existierende Werte)],2,LEN([Nachweismethode Moose (Existierende Werte)])))
+    
+    
+    --Fertilität
+    UPDATE #tmp_results SET [Fertilität (Existierende Werte)] = '' WHERE [Fertilität (Existierende Werte)] NOT IN (SELECT kurzname FROM #fertilität_moose)
+    UPDATE #tmp_results SET [Fertilität (Existierende Werte)] = t2.langname FROM #tmp_results t1 
+           JOIN #fertilität_moose t2  ON t1.[Fertilität (Existierende Werte)] = t2.kurzname
+    
+    --Trägergehölz: unbekannte entfernen
+    UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] = '' WHERE [Trägergehölz Moose (Existierende Werte)] NOT IN (SELECT name FROM #trägergehölz_moose)
+    
+    --Substrattyp: Kürzel nicht geparst bei der Eingabe
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] = LEFT([Substrattyp Moose (Existierende Werte)],charindex('-',[Substrattyp Moose (Existierende Werte)])-1) WHERE charindex('-',[Substrattyp Moose (Existierende Werte)]) &gt; 0
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] = '' WHERE [Substrattyp Moose (Existierende Werte)] NOT IN (SELECT kurzname FROM #substrattyp_moose)
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] = t2.langname FROM #tmp_results t1 
+           JOIN #substrattyp_moose t2  ON t1.[Substrattyp Moose (Existierende Werte)] = t2.kurzname
+    
+    --NULL-Werte ersetzen
+    UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] =  '' WHERE [Substrattyp Moose (Existierende Werte)] IS NULL
+    UPDATE #tmp_results SET [Fertilität (Existierende Werte)] =  '' WHERE [Fertilität (Existierende Werte)] IS NULL
+    UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] =  '' WHERE [Trägergehölz Moose (Existierende Werte)] IS NULL
+    
+    --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+           WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
+    
+    --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+           WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
+
+    --Zeilenumbrüchen in Zellen durch pipe ersetzen
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = left([Kommentar zur Artbeobachtung],len([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = REPLACE([Kommentar zur Aufnahme],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Aufnahme] != ''
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = REPLACE([Kommentar zur Artbeobachtung],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Artbeobachtung] != ''
+    
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  len([Kommentar zur Aufnahme]) and len([Kommentar zur Aufnahme]) &gt; 0 
+    
+    --Quelle hineinschreiben: Recorder Site-ID, Projekt, Projektleiter, SURVEY_EVENT_KEY
+    
+    UPDATE #tmp_results  SET Datenquelle = 
+    'Recorder SiteID ' + (SELECT TOP 1 DATA from SETTING where Name = 'SiteID') +' | '+ 'Projekt ' + item_name + ' (' +dbo.ufn_GetFormattedName(sv.run_by) +')' + ' | '+'Sample ID: '+[Externe ID der Aufnahme]
+    FROM #TMP_RESULTS tr
+    INNER JOIN SAMPLE s on s.SAMPLE_KEY = tr.[Externe ID der Aufnahme]
+    INNER JOIN SURVEY_EVENT se ON se.SURVEY_EVENT_KEY = s.SURVEY_EVENT_KEY
+    INNER JOIN SURVEY sv on sv.SURVEY_KEY = se.SURVEY_KEY
+    
+    --Indicia verwendet nicht den Unscärferadius sonder den Unschärfedurchmesser um einen Punkt deswegen:
+    UPDATE #tmp_results  SET [Unschärfe (m)] = 
+    cast((cast([Unschärfe (m)] as integer) * 2) as varchar(6))
+    WHERE [Unschärfe (m)] != ''
+    
+    -- Überprüfen, ob die Aufnahmemethod für Moose gültig ist. Ansonsten ersetzen durch "Feldbobachtung"
+    UPDATE #tmp_results  SET Aufnahmemethode = 'Feldbeobachtung'
+    WHERE Aufnahmemethode NOT IN (SELECT name FROM #aufnahmemethode_moose)
+    
+    
+    
+    SELECT * FROM #TMP_RESULTS ORDER BY [Externe ID der Aufnahme], [Externe ID des Datensatzes]
+    </Where>
+
+
+
+</SQL>
+
+<Columns>
+<Column name="Sippenname" position="1" width="300"/>
+<Column name="Taxnummer (BfN-Referenz)" position="2" width="120"/>
+<Column name="Nachweismethode Moose (Existierende Werte)" position="3" width="120"/>
+<Column name="Fertilität (Existierende Werte)" position="4" width="120"/>
+<Column name="Trägergehölz Moose (Existierende Werte)" position="5" width="120"/>
+<Column name="Substrattyp Moose (Existierende Werte)" position="6" width="120"/>
+<Column name="Kommentar zur Artbeobachtung" position="7" width="200"/>
+<Column name="Aufnahmedatum" position="8" width="120"/>
+<Column name="Koordinaten" position="9" width="120"/>
+<Column name="Koordinatensystem (EPSG-Code)" position="10" width="100"/>
+<Column name="Unschärfe (m)" position="11" width="100"/>
+<Column name="Verantwortlicher Beobachter" position="12" width="150"/>
+<Column name="Beobachter" position="13" width="200"/>
+<Column name="Fundortname" position="14" width="200"/>
+<Column name="Kommentar zur Aufnahme" position="15" width="200"/>
+<Column name="Aufnahmemethode" position="16" width="100"/>
+<Column name="Datenquelle" position="17" width="200"/>
+<Column name="Externe ID der Aufnahme" position="18" width="120"/>
+<Column name="Externe ID des Datensatzes" position="19" width="120"/>
+<Column name="Bestimmungssicherheit (sicher/unsicher)" position="20" width="100"/>
+<Column name="Eingabeform (nicht verwendet)" position="21" width="120"/>
+</Columns>
+
+</CustomReport>
