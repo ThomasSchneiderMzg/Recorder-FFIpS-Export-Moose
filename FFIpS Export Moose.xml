@@ -4,15 +4,14 @@ description="Exportiert Moose eines Projektes oder eines Begangs in eine Struktu
 v01.0 vom 01.11.2018 TS
 v02.0 vom 21.07.2019, ergänzt um Ausgabe über ein ganzes Projekt
 v03.0 vom 11.05.2020, Anpassung an FFIpS: es wird jetzt der Taxon_Version_Key als externer SChlüssel ausgegeben
-v03.0 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Namens,
-                      Namen ohne Autoren,
-                      Integration der Höhenlage in die Ausgabe"
+v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Namens,
+                      Namen ohne Autoren, Integration der Höhenlage in die Ausgabe, Kleiner Korrekturen"
 >
 
 <SQL>
 
-    declare @indicia_user_name varchar(50)
-    set @indicia_user_name = 'Tim Tester'
+    DECLARE @indicia_user_name varchar(50)
+    SET @indicia_user_name = 'Tim Tester'
 
     
     --Zur Sicherheit: löschen temporärer Tabellen
@@ -197,36 +196,36 @@ v03.0 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
 
     <Where keytype="survey">
     
-    declare @survey_key char(16)
-    set @survey_key = '%s'
+    DECLARE @survey_key char(16)
+    SET @survey_key = '%s'
 
     DELETE FROM #tmp_results
     
     INSERT INTO #tmp_results
     SELECT 
-	-- s.sample_key,
+    -- s.sample_key,
     -- s.spatial_ref,
     -- s.SAMPLE_REFERENCE,
     dbo.ufn_BfNReturnFormattedSpeciesNameFlora(TLI.PREFERRED_NAME, 1) as taxon_name, --[Sippenname],
     --tli.TAXON_VERSION_KEY AS taxnr, --[Taxnummer (BfN-Referenz)],
     tli.PREFERRED_NAME AS taxnr, --[Taxnummer (BfN-Referenz)],
-    (select distinct LONG_NAME from record_type rt where rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
-    left(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
-    rtrim(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
-    cast(cast(s.lat as decimal(9,5)) as varchar(9))+'N '+cast(cast(s.long as decimal(9,5)) as varchar(9))+'E' AS coordinates, --Koordinaten,
+    (SELECT DISTINCT LONG_NAME from record_type rt WHERE rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
+    LEFT(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
+    RTRIM(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
+    CAST(cast(s.lat as decimal(9,5)) AS varchar(9))+'N '+CAST(CAST(s.long AS decimal(9,5)) AS varchar(9))+'E' AS coordinates, --Koordinaten,
     '4326' AS crs, --[Koordinatensystem (EPSG-Code)],
-	(select top 1 case when charindex('-',data) > 0 then cast(dbo.ufn_BfNNumbersFromString(left(data,charindex('-',data)-1)) as varchar(99)) 
+	(SELECT TOP 1 case when charindex('-',data) > 0 then cast(dbo.ufn_BfNNumbersFromString(left(data,charindex('-',data)-1)) as varchar(99)) 
 	     +'-'+cast(dbo.ufn_BfNNumbersFromString(substring(data,charindex('-',data),99)) as varchar(99)) 
 	     else cast(dbo.ufn_BfNNumbersFromString(data) as varchar(99))  end
-	  from sample_data where sample_key = s.SAMPLE_KEY and
+	  FROM sample_data WHERE sample_key = s.SAMPLE_KEY and
 	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' and MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') as altitude, --[Höhenlage]
-    isnull(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  as usr, --[Unschärfe (m)],
+    ISNULL(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  AS usr, --[Unschärfe (m)],
     dbo.ufn_BfNGetResponsibleRecorder(s.sample_key) AS responsible_recorder, --[Verantwortlicher Beobachter],
     --left(dbo.ufn_BfNGetRecorders(s.sample_key, CHAR(13)),2000) AS recorders, --[Beobachter],
-    left(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
+    LEFT(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
     case when isnull(s.location_name, '') = '' then LN.ITEM_NAME 
          when LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
          when rtrim(LN.ITEM_NAME) = rtrim(S.LOCATION_NAME) THEN S.LOCATION_NAME
