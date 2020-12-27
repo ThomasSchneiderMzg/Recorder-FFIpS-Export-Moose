@@ -4,8 +4,11 @@ description="Exportiert Moose eines Projektes oder eines Begangs in eine Struktu
 v01.0 vom 01.11.2018 TS
 v02.0 vom 21.07.2019, ergänzt um Ausgabe über ein ganzes Projekt
 v03.0 vom 11.05.2020, Anpassung an FFIpS: es wird jetzt der Taxon_Version_Key als externer SChlüssel ausgegeben
-v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Namens,
-                      Namen ohne Autoren, Integration der Höhenlage in die Ausgabe, Kleiner Korrekturen"
+v04.3 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Namens,
+                      Namen ohne Autoren, 
+                      Integration der Höhenlage in die Ausgabe, 
+                      Abfrage vom Sample (Aufnahme)-Knoten möglich,
+                      Kleinere Korrekturen, Codebereinigung"
 >
 
 <SQL>
@@ -31,7 +34,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     -- Referenztabellen anlegen
     
     CREATE TABLE #aufnahmemethode_moose  
-       (name varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+       (name VARCHAR(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
     INSERT INTO #aufnahmemethode_moose VALUES ('Bryolog. Kartierung')
     INSERT INTO #aufnahmemethode_moose VALUES ('BryoKart Kurznotiz')
     INSERT INTO #aufnahmemethode_moose VALUES ('BryoKart Einzelmeldung')
@@ -46,8 +49,8 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     INSERT INTO #nachweismethode_moose VALUES ('H', 'Herbarbeleg')
     
     CREATE TABLE #substrattyp_moose  
-       (kurzname varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
-        langname varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+       (kurzname VARCHAR(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        langname VARCHAR(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
     
     INSERT INTO #substrattyp_moose VALUES ('W', 'Wasser')
     INSERT INTO #substrattyp_moose VALUES ('Bsc', 'Schlamm')
@@ -80,7 +83,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     INSERT INTO #substrattyp_moose VALUES ('So', 'Sonstiges Substrat')
     
     CREATE TABLE #trägergehölz_moose  
-       (name varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
+       (name VARCHAR(100) COLLATE SQL_Latin1_General_CP1_CI_AS)
     
     INSERT INTO #trägergehölz_moose VALUES ('Abies alba')
     INSERT INTO #trägergehölz_moose VALUES ('Acer campestre')
@@ -175,7 +178,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
         [Aufnahmedatum] varchar(24) COLLATE SQL_Latin1_General_CP1_CI_AS,
         [Koordinaten] varchar(24) COLLATE SQL_Latin1_General_CP1_CI_AS,
         [Koordinatensystem (EPSG-Code)] varchar(4) COLLATE SQL_Latin1_General_CP1_CI_AS,
-        [Höhenlage] varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
+        [Höhenlage (m)] varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
         [Unschärfe (m)] varchar(6) COLLATE SQL_Latin1_General_CP1_CI_AS,
         [Verantwortlicher Beobachter] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS,
         [Beobachter] varchar(1000) COLLATE SQL_Latin1_General_CP1_CI_AS,
@@ -196,18 +199,14 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
 
     <Where keytype="survey">
     
-    DECLARE @survey_key char(16)
-    SET @survey_key = '%s'
+    DECLARE @key CHAR(16)
+    SET @key = '%s'
 
     DELETE FROM #tmp_results
     
     INSERT INTO #tmp_results
     SELECT 
-    -- s.sample_key,
-    -- s.spatial_ref,
-    -- s.SAMPLE_REFERENCE,
     dbo.ufn_BfNReturnFormattedSpeciesNameFlora(TLI.PREFERRED_NAME, 1) as taxon_name, --[Sippenname],
-    --tli.TAXON_VERSION_KEY AS taxnr, --[Taxnummer (BfN-Referenz)],
     tli.PREFERRED_NAME AS taxnr, --[Taxnummer (BfN-Referenz)],
     (SELECT DISTINCT LONG_NAME from record_type rt WHERE rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
     (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
@@ -217,27 +216,26 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     RTRIM(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
     CAST(cast(s.lat as decimal(9,5)) AS varchar(9))+'N '+CAST(CAST(s.long AS decimal(9,5)) AS varchar(9))+'E' AS coordinates, --Koordinaten,
     '4326' AS crs, --[Koordinatensystem (EPSG-Code)],
-	(SELECT TOP 1 case when charindex('-',data) > 0 then cast(dbo.ufn_BfNNumbersFromString(left(data,charindex('-',data)-1)) as varchar(99)) 
-	     +'-'+cast(dbo.ufn_BfNNumbersFromString(substring(data,charindex('-',data),99)) as varchar(99)) 
-	     else cast(dbo.ufn_BfNNumbersFromString(data) as varchar(99))  end
-	  FROM sample_data WHERE sample_key = s.SAMPLE_KEY and
-	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' and MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') as altitude, --[Höhenlage]
+	(SELECT TOP 1 CASE WHEN CHARINDEX('-',data) > 0 then CAST(dbo.ufn_BfNNumbersFromString(LEFT(DATA,CHARINDEX('-',data)-1)) AS VARCHAR(99)) 
+	     +'-'+CAST(dbo.ufn_BfNNumbersFromString(SUBSTRING(DATA,CHARINDEX('-',data),99)) AS VARCHAR(99)) 
+	     ELSE CAST(dbo.ufn_BfNNumbersFromString(data) AS VARCHAR(99)) END
+	  FROM sample_data WHERE sample_key = s.SAMPLE_KEY AND
+	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' AND MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') AS altitude, --[Höhenlage]
     ISNULL(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  AS usr, --[Unschärfe (m)],
     dbo.ufn_BfNGetResponsibleRecorder(s.sample_key) AS responsible_recorder, --[Verantwortlicher Beobachter],
-    --left(dbo.ufn_BfNGetRecorders(s.sample_key, CHAR(13)),2000) AS recorders, --[Beobachter],
     LEFT(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
-    case when isnull(s.location_name, '') = '' then LN.ITEM_NAME 
-         when LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
-         when rtrim(LN.ITEM_NAME) = rtrim(S.LOCATION_NAME) THEN S.LOCATION_NAME
+    CASE WHEN isnull(s.location_name, '') = '' then LN.ITEM_NAME 
+         WHEN LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
+         WHEN rtrim(LN.ITEM_NAME) = RTRIM(S.LOCATION_NAME) THEN S.LOCATION_NAME
          ELSE LN.ITEM_NAME + ' (' + S.LOCATION_NAME +')'
     END AS location_name, --Fundortname,
     ISNULL(dbo.ufn_RtfToPlaintext2(s.comment,1),'') AS sample_comment, --[Kommentar zur Aufnahme],
     st.Short_name AS sample_type, --[Aufnahmemethode],
     'ADBS' AS data_source, --Datenquelle,
-    s.sample_key as sample_id, --[Externe ID der Aufnahme],
-    toc.taxon_occurrence_key as occurrence_id, -- [Externe ID des Datensatzes],
+    s.sample_key AS sample_id, --[Externe ID der Aufnahme],
+    toc.taxon_occurrence_key AS occurrence_id, -- [Externe ID des Datensatzes],
     'sicher' as p1, --[Bestimmungssicherheit (sicher/unsicher)],
-    'moose-kartierliste' as entry_form  --, --[Eingabeform]
+    'moose-kartierliste' AS entry_form  --, --[Eingabeform]
     --@indicia_user_name  AS [Datensatz erstellt durch (Referenzierter Anwender)],
     --@indicia_user_name  AS [Datensatz aktualisiert durch],
     --@indicia_user_name  AS [Aufnahme erstellt durch],
@@ -249,7 +247,6 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     LEFT OUTER JOIN (select * from Location_name LN where preferred = 1) LN ON LN.LOCATION_KEY = S.LOCATION_KEY
     INNER JOIN Taxon_Occurrence TOC ON TOC.Sample_key = S.Sample_Key
     INNER JOIN Taxon_Determination TDET ON TDET.Taxon_Occurrence_Key = TOC.Taxon_Occurrence_Key
-    --INNER JOIN Index_Taxon_Name ITN ON ITN.Taxon_List_Item_Key =TDET.Taxon_List_Item_Key
     INNER JOIN Taxon_List_Item TLI ON TLI.Taxon_List_Item_Key = TDET.Taxon_List_Item_Key
     INNER JOIN Taxon_Version TV ON TV.Taxon_Version_Key = TLI.Taxon_Version_Key
                     WHERE NOT toc.VERIFIED=1
@@ -258,7 +255,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
                           AND toc.CHECKED=1
                           AND NOT s.SPATIAL_REF_SYSTEM in ('QQQ','QYX')
                           AND tv.OUTPUT_GROUP_KEY IN ('NHMSYS0000080061','NHMSYS0000080083','NHMSYS0000080090')  --nur Moose!
-                          AND SE.SURVEY_KEY = @survey_key
+                          AND SE.SURVEY_KEY = @key
     
     -- *** Nachbearbeitung ***
     
@@ -271,7 +268,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     INNER JOIN TAXON_LIST_ITEM tli2 ON tli2.TAXON_VERSION_KEY = tli.TAXON_VERSION_KEY
     
     -- Nachweismethode
-    UPDATE #tmp_results set [Nachweismethode Moose (Existierende Werte)] = '' where [Nachweismethode Moose (Existierende Werte)] = 'none'
+    UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = '' WHERE [Nachweismethode Moose (Existierende Werte)] = 'none'
     UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = UPPER(LEFT([Nachweismethode Moose (Existierende Werte)],1))+LOWER(SUBSTRING([Nachweismethode Moose (Existierende Werte)],2,LEN([Nachweismethode Moose (Existierende Werte)])))
       
     --Fertilität
@@ -292,36 +289,36 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] =  '' WHERE [Substrattyp Moose (Existierende Werte)] IS NULL
     UPDATE #tmp_results SET [Fertilität (Existierende Werte)] =  '' WHERE [Fertilität (Existierende Werte)] IS NULL
     UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] =  '' WHERE [Trägergehölz Moose (Existierende Werte)] IS NULL
-    UPDATE #tmp_results SET [Höhenlage] =  '' WHERE [Höhenlage] IS NULL  
+    UPDATE #tmp_results SET [Höhenlage (m)] =  '' WHERE [Höhenlage (m)] IS NULL  
 
 	--CTS Spezial: FlorEin-Relikte aus Kommentar löschen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) FROM #tmp_results  
            WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
     
     --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) FROM #tmp_results  
            WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
 
     --Zeilenumbruch in Zellen durch pipe ersetzen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
-    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = left([Kommentar zur Artbeobachtung],len([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = LEFT([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = LEFT([Kommentar zur Artbeobachtung],LEN([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
     UPDATE #tmp_results SET [Kommentar zur Aufnahme] = REPLACE([Kommentar zur Aufnahme],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Aufnahme] != ''
     UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = REPLACE([Kommentar zur Artbeobachtung],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Artbeobachtung] != ''
     
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  len([Kommentar zur Aufnahme]) AND len([Kommentar zur Aufnahme]) &gt; 0
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = LEFT([Kommentar zur Aufnahme],LEN([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  LEN([Kommentar zur Aufnahme]) AND LEN([Kommentar zur Aufnahme]) &gt; 0
     
     --Quelle hineinschreiben: Recorder Site-ID, Projekt, Projektleiter, SURVEY_EVENT_KEY
     
     UPDATE #tmp_results  SET Datenquelle = 
-    'Recorder SiteID ' + (SELECT TOP 1 DATA from SETTING where Name = 'SiteID') +' | '+ 'Projekt ' + item_name + ' (' +dbo.ufn_GetFormattedName(sv.run_by) +')' + ' | '+'Sample ID: '+[Externe ID der Aufnahme]
+    'Recorder SiteID ' + (SELECT TOP 1 DATA FROM SETTING WHERE Name = 'SiteID') +' | '+ 'Projekt ' + item_name + ' (' +dbo.ufn_GetFormattedName(sv.run_by) +')' + ' | '+'Sample ID: '+[Externe ID der Aufnahme]
     FROM #TMP_RESULTS tr
-    INNER JOIN SAMPLE s on s.SAMPLE_KEY = tr.[Externe ID der Aufnahme]
+    INNER JOIN SAMPLE s ON s.SAMPLE_KEY = tr.[Externe ID der Aufnahme]
     INNER JOIN SURVEY_EVENT se ON se.SURVEY_EVENT_KEY = s.SURVEY_EVENT_KEY
-    INNER JOIN SURVEY sv on sv.SURVEY_KEY = se.SURVEY_KEY
+    INNER JOIN SURVEY sv ON sv.SURVEY_KEY = se.SURVEY_KEY
     
     --Indicia verwendet nicht den Unschärferadius sondern den Unschärfedurchmesser um einen Punkt deswegen:
     UPDATE #tmp_results  SET [Unschärfe (m)] = 
-    cast((cast([Unschärfe (m)] as integer) * 2) as varchar(6))
+    CAST((CAST([Unschärfe (m)] AS INTEGER) * 2) AS VARCHAR(6))
     WHERE [Unschärfe (m)] != ''
     
     -- Überprüfen, ob die Aufnahmemethod für Moose gültig ist. Ansonsten ersetzen durch "Feldbobachtung"
@@ -334,48 +331,43 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
 
     <Where keytype="Event">
     
-    declare @survey_event_key char(16)
-    set @survey_event_key = '%s'
+    DECLARE @key CHAR(16)
+    SET @key = '%s'
 
     DELETE FROM #tmp_results
     
     INSERT INTO #tmp_results
     SELECT 
-	-- s.sample_key,
-    -- s.spatial_ref,
-    -- s.SAMPLE_REFERENCE,
     dbo.ufn_BfNReturnFormattedSpeciesNameFlora(TLI.PREFERRED_NAME, 1) as taxon_name, --[Sippenname],
-    --tli.TAXON_VERSION_KEY AS taxnr, --[Taxnummer (BfN-Referenz)],
     tli.PREFERRED_NAME AS taxnr, --[Taxnummer (BfN-Referenz)],
-    (select distinct LONG_NAME from record_type rt where rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
-    left(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
-    rtrim(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
-    cast(cast(s.lat as decimal(9,5)) as varchar(9))+'N '+cast(cast(s.long as decimal(9,5)) as varchar(9))+'E' AS coordinates, --Koordinaten,
+    (SELECT DISTINCT LONG_NAME from record_type rt WHERE rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
+    LEFT(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
+    RTRIM(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
+    CAST(cast(s.lat as decimal(9,5)) AS varchar(9))+'N '+CAST(CAST(s.long AS decimal(9,5)) AS varchar(9))+'E' AS coordinates, --Koordinaten,
     '4326' AS crs, --[Koordinatensystem (EPSG-Code)],
-	(select top 1 case when charindex('-',data) > 0 then cast(dbo.ufn_BfNNumbersFromString(left(data,charindex('-',data)-1)) as varchar(99)) 
-	     +'-'+cast(dbo.ufn_BfNNumbersFromString(substring(data,charindex('-',data),99)) as varchar(99)) 
-	     else cast(dbo.ufn_BfNNumbersFromString(data) as varchar(99))  end
-	  from sample_data where sample_key = s.SAMPLE_KEY and
-	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' and MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') as altitude, --[Höhenlage]
-    isnull(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  as usr, --[Unschärfe (m)],
+	(SELECT TOP 1 CASE WHEN CHARINDEX('-',data) > 0 then CAST(dbo.ufn_BfNNumbersFromString(LEFT(DATA,CHARINDEX('-',data)-1)) AS VARCHAR(99)) 
+	     +'-'+CAST(dbo.ufn_BfNNumbersFromString(SUBSTRING(DATA,CHARINDEX('-',data),99)) AS VARCHAR(99)) 
+	     ELSE CAST(dbo.ufn_BfNNumbersFromString(data) AS VARCHAR(99)) END
+	  FROM sample_data WHERE sample_key = s.SAMPLE_KEY AND
+	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' AND MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') AS altitude, --[Höhenlage]
+    ISNULL(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  AS usr, --[Unschärfe (m)],
     dbo.ufn_BfNGetResponsibleRecorder(s.sample_key) AS responsible_recorder, --[Verantwortlicher Beobachter],
-    --left(dbo.ufn_BfNGetRecorders(s.sample_key, CHAR(13)),2000) AS recorders, --[Beobachter],
-    left(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
-    case when isnull(s.location_name, '') = '' then LN.ITEM_NAME 
-         when LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
-         when rtrim(LN.ITEM_NAME) = rtrim(S.LOCATION_NAME) THEN S.LOCATION_NAME
+    LEFT(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
+    CASE WHEN isnull(s.location_name, '') = '' then LN.ITEM_NAME 
+         WHEN LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
+         WHEN rtrim(LN.ITEM_NAME) = RTRIM(S.LOCATION_NAME) THEN S.LOCATION_NAME
          ELSE LN.ITEM_NAME + ' (' + S.LOCATION_NAME +')'
     END AS location_name, --Fundortname,
     ISNULL(dbo.ufn_RtfToPlaintext2(s.comment,1),'') AS sample_comment, --[Kommentar zur Aufnahme],
     st.Short_name AS sample_type, --[Aufnahmemethode],
     'ADBS' AS data_source, --Datenquelle,
-    s.sample_key as sample_id, --[Externe ID der Aufnahme],
-    toc.taxon_occurrence_key as occurrence_id, -- [Externe ID des Datensatzes],
+    s.sample_key AS sample_id, --[Externe ID der Aufnahme],
+    toc.taxon_occurrence_key AS occurrence_id, -- [Externe ID des Datensatzes],
     'sicher' as p1, --[Bestimmungssicherheit (sicher/unsicher)],
-    'moose-kartierliste' as entry_form  --, --[Eingabeform]
+    'moose-kartierliste' AS entry_form  --, --[Eingabeform]
     --@indicia_user_name  AS [Datensatz erstellt durch (Referenzierter Anwender)],
     --@indicia_user_name  AS [Datensatz aktualisiert durch],
     --@indicia_user_name  AS [Aufnahme erstellt durch],
@@ -387,7 +379,6 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     LEFT OUTER JOIN (select * from Location_name LN where preferred = 1) LN ON LN.LOCATION_KEY = S.LOCATION_KEY
     INNER JOIN Taxon_Occurrence TOC ON TOC.Sample_key = S.Sample_Key
     INNER JOIN Taxon_Determination TDET ON TDET.Taxon_Occurrence_Key = TOC.Taxon_Occurrence_Key
-    --INNER JOIN Index_Taxon_Name ITN ON ITN.Taxon_List_Item_Key =TDET.Taxon_List_Item_Key
     INNER JOIN Taxon_List_Item TLI ON TLI.Taxon_List_Item_Key = TDET.Taxon_List_Item_Key
     INNER JOIN Taxon_Version TV ON TV.Taxon_Version_Key = TLI.Taxon_Version_Key
                     WHERE NOT toc.VERIFIED=1
@@ -396,7 +387,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
                           AND toc.CHECKED=1
                           AND NOT s.SPATIAL_REF_SYSTEM in ('QQQ','QYX')
                           AND tv.OUTPUT_GROUP_KEY IN ('NHMSYS0000080061','NHMSYS0000080083','NHMSYS0000080090')  --nur Moose!
-                          AND SE.SURVEY_EVENT_KEY = @survey_event_key
+                          AND SE.SURVEY_EVENT_KEY = @key
     
     -- *** Nachbearbeitung ***
     
@@ -409,7 +400,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     INNER JOIN TAXON_LIST_ITEM tli2 ON tli2.TAXON_VERSION_KEY = tli.TAXON_VERSION_KEY
     
     -- Nachweismethode
-    UPDATE #tmp_results set [Nachweismethode Moose (Existierende Werte)] = '' where [Nachweismethode Moose (Existierende Werte)] = 'none'
+    UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = '' WHERE [Nachweismethode Moose (Existierende Werte)] = 'none'
     UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = UPPER(LEFT([Nachweismethode Moose (Existierende Werte)],1))+LOWER(SUBSTRING([Nachweismethode Moose (Existierende Werte)],2,LEN([Nachweismethode Moose (Existierende Werte)])))
       
     --Fertilität
@@ -430,36 +421,36 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] =  '' WHERE [Substrattyp Moose (Existierende Werte)] IS NULL
     UPDATE #tmp_results SET [Fertilität (Existierende Werte)] =  '' WHERE [Fertilität (Existierende Werte)] IS NULL
     UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] =  '' WHERE [Trägergehölz Moose (Existierende Werte)] IS NULL
-    UPDATE #tmp_results SET [Höhenlage] =  '' WHERE [Höhenlage] IS NULL  
+    UPDATE #tmp_results SET [Höhenlage (m)] =  '' WHERE [Höhenlage (m)] IS NULL  
 
 	--CTS Spezial: FlorEin-Relikte aus Kommentar löschen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) FROM #tmp_results  
            WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
     
     --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) FROM #tmp_results  
            WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
 
     --Zeilenumbruch in Zellen durch pipe ersetzen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
-    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = left([Kommentar zur Artbeobachtung],len([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = LEFT([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = LEFT([Kommentar zur Artbeobachtung],LEN([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
     UPDATE #tmp_results SET [Kommentar zur Aufnahme] = REPLACE([Kommentar zur Aufnahme],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Aufnahme] != ''
     UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = REPLACE([Kommentar zur Artbeobachtung],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Artbeobachtung] != ''
     
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  len([Kommentar zur Aufnahme]) AND len([Kommentar zur Aufnahme]) &gt; 0
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = LEFT([Kommentar zur Aufnahme],LEN([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  LEN([Kommentar zur Aufnahme]) AND LEN([Kommentar zur Aufnahme]) &gt; 0
     
     --Quelle hineinschreiben: Recorder Site-ID, Projekt, Projektleiter, SURVEY_EVENT_KEY
     
     UPDATE #tmp_results  SET Datenquelle = 
-    'Recorder SiteID ' + (SELECT TOP 1 DATA from SETTING where Name = 'SiteID') +' | '+ 'Projekt ' + item_name + ' (' +dbo.ufn_GetFormattedName(sv.run_by) +')' + ' | '+'Sample ID: '+[Externe ID der Aufnahme]
+    'Recorder SiteID ' + (SELECT TOP 1 DATA FROM SETTING WHERE Name = 'SiteID') +' | '+ 'Projekt ' + item_name + ' (' +dbo.ufn_GetFormattedName(sv.run_by) +')' + ' | '+'Sample ID: '+[Externe ID der Aufnahme]
     FROM #TMP_RESULTS tr
-    INNER JOIN SAMPLE s on s.SAMPLE_KEY = tr.[Externe ID der Aufnahme]
+    INNER JOIN SAMPLE s ON s.SAMPLE_KEY = tr.[Externe ID der Aufnahme]
     INNER JOIN SURVEY_EVENT se ON se.SURVEY_EVENT_KEY = s.SURVEY_EVENT_KEY
-    INNER JOIN SURVEY sv on sv.SURVEY_KEY = se.SURVEY_KEY
+    INNER JOIN SURVEY sv ON sv.SURVEY_KEY = se.SURVEY_KEY
     
     --Indicia verwendet nicht den Unschärferadius sondern den Unschärfedurchmesser um einen Punkt deswegen:
     UPDATE #tmp_results  SET [Unschärfe (m)] = 
-    cast((cast([Unschärfe (m)] as integer) * 2) as varchar(6))
+    CAST((CAST([Unschärfe (m)] AS integer) * 2) AS VARCHAR(6))
     WHERE [Unschärfe (m)] != ''
     
     -- Überprüfen, ob die Aufnahmemethod für Moose gültig ist. Ansonsten ersetzen durch "Feldbobachtung"
@@ -470,49 +461,43 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     </Where>
 
     <Where keytype="Sample">
-    
-    declare @sample_key char(16)
-    set @sample_key = '%s'
+    DECLARE @key CHAR(16)
+    SET @key = '%s'
 
     DELETE FROM #tmp_results
     
     INSERT INTO #tmp_results
     SELECT 
-	-- s.sample_key,
-    -- s.spatial_ref,
-    -- s.SAMPLE_REFERENCE,
     dbo.ufn_BfNReturnFormattedSpeciesNameFlora(TLI.PREFERRED_NAME, 1) as taxon_name, --[Sippenname],
-    --tli.TAXON_VERSION_KEY AS taxnr, --[Taxnummer (BfN-Referenz)],
     tli.PREFERRED_NAME AS taxnr, --[Taxnummer (BfN-Referenz)],
-    (select distinct LONG_NAME from record_type rt where rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
-    (select top 1 Data from taxon_occurrence_data where taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
-    left(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
-    rtrim(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
-    cast(cast(s.lat as decimal(9,5)) as varchar(9))+'N '+cast(cast(s.long as decimal(9,5)) as varchar(9))+'E' AS coordinates, --Koordinaten,
+    (SELECT DISTINCT LONG_NAME from record_type rt WHERE rt.record_type_key = toc.RECORD_TYPE_KEY) as record_type, --Nachweismethode,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000131' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000044') as Fertilität,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000043') as Trägergehölz,
+    (SELECT TOP 1 Data FROM taxon_occurrence_data WHERE taxon_occurrence_key = toc.TAXON_OCCURRENCE_KEY and MEASUREMENT_QUALIFIER_KEY = 'BFNSYS0000000130' and MEASUREMENT_UNIT_KEY = 'BFNSYS0000000042') as Substrattyp,
+    LEFT(ISNULL(dbo.ufn_RtfToPlaintext2(toc.comment,1),''),2000) AS taxon_occurrence_comment, -- [Kommentar zur Artbeobachtung],
+    RTRIM(dbo.ufn_BfNReturnVagueDateDe(s.vague_date_start, s.vague_date_end, s.vague_date_type)) AS sample_date, -- rtrim erforderlich! --[Aufnahmedatum],
+    CAST(cast(s.lat as decimal(9,5)) AS varchar(9))+'N '+CAST(CAST(s.long AS decimal(9,5)) AS varchar(9))+'E' AS coordinates, --Koordinaten,
     '4326' AS crs, --[Koordinatensystem (EPSG-Code)],
-	(select top 1 case when charindex('-',data) > 0 then cast(dbo.ufn_BfNNumbersFromString(left(data,charindex('-',data)-1)) as varchar(99)) 
-	     +'-'+cast(dbo.ufn_BfNNumbersFromString(substring(data,charindex('-',data),99)) as varchar(99)) 
-	     else cast(dbo.ufn_BfNNumbersFromString(data) as varchar(99))  end
-	  from sample_data where sample_key = s.SAMPLE_KEY and
-	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' and MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') as altitude, --[Höhenlage]
-    isnull(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  as usr, --[Unschärfe (m)],
+	(SELECT TOP 1 CASE WHEN CHARINDEX('-',data) > 0 then CAST(dbo.ufn_BfNNumbersFromString(LEFT(DATA,CHARINDEX('-',data)-1)) AS VARCHAR(99)) 
+	     +'-'+CAST(dbo.ufn_BfNNumbersFromString(SUBSTRING(DATA,CHARINDEX('-',data),99)) AS VARCHAR(99)) 
+	     ELSE CAST(dbo.ufn_BfNNumbersFromString(data) AS VARCHAR(99)) END
+	  FROM sample_data WHERE sample_key = s.SAMPLE_KEY AND
+	  MEASUREMENT_QUALIFIER_KEY = 'NBNSYS0000000003' AND MEASUREMENT_UNIT_KEY = 'NBNSYS0000000006') AS altitude, --[Höhenlage]
+    ISNULL(dbo.ufn_BfNGetCoordinateUncertainty(s.sample_key),'')  AS usr, --[Unschärfe (m)],
     dbo.ufn_BfNGetResponsibleRecorder(s.sample_key) AS responsible_recorder, --[Verantwortlicher Beobachter],
-    --left(dbo.ufn_BfNGetRecorders(s.sample_key, CHAR(13)),2000) AS recorders, --[Beobachter],
-    left(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
-    case when isnull(s.location_name, '') = '' then LN.ITEM_NAME 
-         when LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
-         when rtrim(LN.ITEM_NAME) = rtrim(S.LOCATION_NAME) THEN S.LOCATION_NAME
+    LEFT(dbo.ufn_BfNGetRecorders(s.sample_key, '; '),2000) AS recorders, --[Beobachter],
+    CASE WHEN isnull(s.location_name, '') = '' then LN.ITEM_NAME 
+         WHEN LN.ITEM_NAME IS NULL THEN S.LOCATION_NAME
+         WHEN rtrim(LN.ITEM_NAME) = RTRIM(S.LOCATION_NAME) THEN S.LOCATION_NAME
          ELSE LN.ITEM_NAME + ' (' + S.LOCATION_NAME +')'
     END AS location_name, --Fundortname,
     ISNULL(dbo.ufn_RtfToPlaintext2(s.comment,1),'') AS sample_comment, --[Kommentar zur Aufnahme],
     st.Short_name AS sample_type, --[Aufnahmemethode],
     'ADBS' AS data_source, --Datenquelle,
-    s.sample_key as sample_id, --[Externe ID der Aufnahme],
-    toc.taxon_occurrence_key as occurrence_id, -- [Externe ID des Datensatzes],
+    s.sample_key AS sample_id, --[Externe ID der Aufnahme],
+    toc.taxon_occurrence_key AS occurrence_id, -- [Externe ID des Datensatzes],
     'sicher' as p1, --[Bestimmungssicherheit (sicher/unsicher)],
-    'moose-kartierliste' as entry_form  --, --[Eingabeform]
+    'moose-kartierliste' AS entry_form  --, --[Eingabeform]
     --@indicia_user_name  AS [Datensatz erstellt durch (Referenzierter Anwender)],
     --@indicia_user_name  AS [Datensatz aktualisiert durch],
     --@indicia_user_name  AS [Aufnahme erstellt durch],
@@ -524,7 +509,6 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     LEFT OUTER JOIN (select * from Location_name LN where preferred = 1) LN ON LN.LOCATION_KEY = S.LOCATION_KEY
     INNER JOIN Taxon_Occurrence TOC ON TOC.Sample_key = S.Sample_Key
     INNER JOIN Taxon_Determination TDET ON TDET.Taxon_Occurrence_Key = TOC.Taxon_Occurrence_Key
-    --INNER JOIN Index_Taxon_Name ITN ON ITN.Taxon_List_Item_Key =TDET.Taxon_List_Item_Key
     INNER JOIN Taxon_List_Item TLI ON TLI.Taxon_List_Item_Key = TDET.Taxon_List_Item_Key
     INNER JOIN Taxon_Version TV ON TV.Taxon_Version_Key = TLI.Taxon_Version_Key
                     WHERE NOT toc.VERIFIED=1
@@ -533,7 +517,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
                           AND toc.CHECKED=1
                           AND NOT s.SPATIAL_REF_SYSTEM in ('QQQ','QYX')
                           AND tv.OUTPUT_GROUP_KEY IN ('NHMSYS0000080061','NHMSYS0000080083','NHMSYS0000080090')  --nur Moose!
-                          AND S.SAMPLE_KEY = @sample_key
+                          AND S.SAMPLE_KEY = @key
     
     -- *** Nachbearbeitung ***
     
@@ -546,7 +530,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     INNER JOIN TAXON_LIST_ITEM tli2 ON tli2.TAXON_VERSION_KEY = tli.TAXON_VERSION_KEY
     
     -- Nachweismethode
-    UPDATE #tmp_results set [Nachweismethode Moose (Existierende Werte)] = '' where [Nachweismethode Moose (Existierende Werte)] = 'none'
+    UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = '' WHERE [Nachweismethode Moose (Existierende Werte)] = 'none'
     UPDATE #tmp_results SET [Nachweismethode Moose (Existierende Werte)] = UPPER(LEFT([Nachweismethode Moose (Existierende Werte)],1))+LOWER(SUBSTRING([Nachweismethode Moose (Existierende Werte)],2,LEN([Nachweismethode Moose (Existierende Werte)])))
       
     --Fertilität
@@ -567,23 +551,23 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     UPDATE #tmp_results SET [Substrattyp Moose (Existierende Werte)] =  '' WHERE [Substrattyp Moose (Existierende Werte)] IS NULL
     UPDATE #tmp_results SET [Fertilität (Existierende Werte)] =  '' WHERE [Fertilität (Existierende Werte)] IS NULL
     UPDATE #tmp_results SET [Trägergehölz Moose (Existierende Werte)] =  '' WHERE [Trägergehölz Moose (Existierende Werte)] IS NULL
-    UPDATE #tmp_results SET [Höhenlage] =  '' WHERE [Höhenlage] IS NULL  
+    UPDATE #tmp_results SET [Höhenlage (m)] =  '' WHERE [Höhenlage (m)] IS NULL  
 
 	--CTS Spezial: FlorEin-Relikte aus Kommentar löschen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) FROM #tmp_results  
            WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
     
     --CTS Spezial: FlorEin-Relikte aus Kommentar löschen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) from #tmp_results  
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] =  SUBSTRING([Kommentar zur Aufnahme],CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme])+16,999) FROM #tmp_results  
            WHERE CHARINDEX('| Beschreibung:',[Kommentar zur Aufnahme]) &gt; 0
 
     --Zeilenumbruch in Zellen durch pipe ersetzen
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
-    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = left([Kommentar zur Artbeobachtung],len([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = LEFT([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-2) WHERE right([Kommentar zur Aufnahme],2) = CHAR(13)+CHAR(10)
+    UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = LEFT([Kommentar zur Artbeobachtung],LEN([Kommentar zur Artbeobachtung])-2) WHERE [Kommentar zur Artbeobachtung] = CHAR(13)+CHAR(10)
     UPDATE #tmp_results SET [Kommentar zur Aufnahme] = REPLACE([Kommentar zur Aufnahme],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Aufnahme] != ''
     UPDATE #tmp_results SET [Kommentar zur Artbeobachtung] = REPLACE([Kommentar zur Artbeobachtung],CHAR(13)+CHAR(10),'|') WHERE [Kommentar zur Artbeobachtung] != ''
     
-    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = left([Kommentar zur Aufnahme],len([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  len([Kommentar zur Aufnahme]) AND len([Kommentar zur Aufnahme]) &gt; 0
+    UPDATE #tmp_results SET [Kommentar zur Aufnahme] = LEFT([Kommentar zur Aufnahme],LEN([Kommentar zur Aufnahme])-1) WHERE CHARINDEX('|',[Kommentar zur Aufnahme]) =  LEN([Kommentar zur Aufnahme]) AND LEN([Kommentar zur Aufnahme]) &gt; 0
     
     --Quelle hineinschreiben: Recorder Site-ID, Projekt, Projektleiter, SURVEY_EVENT_KEY
     
@@ -596,7 +580,7 @@ v04.1 vom 27.12.2020, Anpassung an Moose Mitteleuropas: Ausgabe des gültigen Na
     
     --Indicia verwendet nicht den Unschärferadius sondern den Unschärfedurchmesser um einen Punkt deswegen:
     UPDATE #tmp_results  SET [Unschärfe (m)] = 
-    cast((cast([Unschärfe (m)] as integer) * 2) as varchar(6))
+    CAST((CAST([Unschärfe (m)] AS integer) * 2) AS VARCHAR(6))
     WHERE [Unschärfe (m)] != ''
     
     -- Überprüfen, ob die Aufnahmemethod für Moose gültig ist. Ansonsten ersetzen durch "Feldbobachtung"
